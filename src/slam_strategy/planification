@@ -15,35 +15,52 @@ from pathfinding import astar as find_path
 rospy.init_node('planification')
 transform_listener = tf.TransformListener()
 
+class Map(graphs.GridGraph):
+    def neighbors(self, location):
+        for n_location in graphs.GridGraph.neighbors(self, location):
+            x, y = n_location
+            if self.map_data[x][y] not in (-1, 100):
+                yield n_location
+
 def to_position(position, quaternion):
-    euler = tf.transformations.euler_from_quaternion(quaternion[:4])
+    euler = tf.transformations.euler_from_quaternion(quaternion)
     return {
             'x': position[0],
             'y': position[1],
             'orientation': euler[2]
             }
 
-def get_position():
-    t = transform_listener.getLatestCommonTime('/base_footprint', '/map')
-    position, quaternion = transform_listener.lookupTransform('/base_footprint', '/map', t)
-    return to_position(position, quaternion)
-
 def map_subscriber(grid):
-    position = get_position()
-    origin = to_position(grid.origin.position, grid.origin.orientation)
+    # try to retrieve the position
+    try:
+        t = transform_listener.getLatestCommonTime('/base_footprint', '/map')
+        position, quaternion = transform_listener.lookupTransform('/base_footprint', '/map', t)
+        position = to_position(position, quaternion)
+    except tf.Exception:
+        return
+
+    # origin
+    grid_info = grid.info
+    origin = grid_info.origin
+    origin = to_position((origin.position.x, origin.position.y),
+                         (origin.orientation.x, origin.orientation.y,
+                          origin.orientation.z, origin.orientation.w))
 
     data = {
         'origin': origin,
         'position': position,
-        'width': grid.width,
-        'height': grid.height,
-        'resolution': grid.height,
+        'width': grid_info.width,
+        'height': grid_info.height,
+        'resolution': grid_info.resolution,
+        #'data': grid.data
         }
 
     # recalibrate with origin
     data['position']['x'] = -1 * (data['position']['x'] - data['origin']['x']) / data['resolution']
     data['position']['y'] = data['height'] - (data['position']['y'] - data['origin']['y']) / data['resolution']
     data['position']['orientation'] += data['origin']['orientation']
+
+    print(data)
 
 rospy.Subscriber('/map', OccupancyGrid, map_subscriber)
 rospy.spin()

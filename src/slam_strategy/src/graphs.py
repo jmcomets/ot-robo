@@ -42,7 +42,7 @@ class GridGraph(Graph):
         for x in range(self.width):
             for y in range(self.height):
                 location = x, y
-                if self.in_bounds(location) and not self.is_wall(location):
+                if self.in_bounds(location):
                     yield location
 
     def in_bounds(self, location):

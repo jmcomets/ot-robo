@@ -1,12 +1,11 @@
 import time
 import threading
-from functools import partial
 import rospy
 from nav_msgs.msg import OccupancyGrid
 import tf
 
 def to_position(position, quaternion):
-    euler = tf.transformations.euler_from_quaternion(quaternion[:4])
+    euler = tf.transformations.euler_from_quaternion(quaternion)
     return {
             'x': position[0],
             'y': position[1],
@@ -16,26 +15,35 @@ def to_position(position, quaternion):
 # global transform listener
 transform_listener = None
 
-def get_position():
-    t = transform_listener.getLatestCommonTime('/base_footprint', '/map')
-    position, quaternion = transform_listener.lookupTransform('/base_footprint', '/map', t)
-    return to_position(position, quaternion)
-
 # global map state (with lock)
 _map = None
 _map_lock = threading.Lock()
 
 def slam(grid):
-    print('slam')
-    position = get_position()
-    origin = to_position(grid.origin.position, grid.origin.orientation)
+    global _map
+
+    # try to retrieve the position
+    try:
+        t = transform_listener.getLatestCommonTime('/base_footprint', '/map')
+        position, quaternion = transform_listener.lookupTransform('/base_footprint', '/map', t)
+        position = to_position(position, quaternion)
+    except tf.Exception:
+        return
+
+    # origin
+    grid_info = grid.info
+    origin = grid_info.origin
+    origin = to_position((origin.position.x, origin.position.y),
+                         (origin.orientation.x, origin.orientation.y,
+                          origin.orientation.z, origin.orientation.w))
 
     data = {
         'origin': origin,
         'position': position,
-        'width': grid.width,
-        'height': grid.height,
-        'resolution': grid.height,
+        'width': grid_info.width,
+        'height': grid_info.height,
+        'resolution': grid_info.resolution,
+        #'data': grid.data
         }
 
     # recalibrate with origin
@@ -44,22 +52,21 @@ def slam(grid):
     data['position']['orientation'] += data['origin']['orientation']
 
     with _map_lock:
-        global _map
         _map = data
 
 def move():
     while True:
         with _map_lock:
             if _map is not None:
-                print('map')
-                print('position', _map['position'])
+                print('map', _map)
             else:
                 print('no map')
-        time.sleep(0.2)
+        time.sleep(1)
 
 def main():
+    global transform_listener
     transform_listener = tf.TransformListener()
     slam_sub = rospy.Subscriber('/map', OccupancyGrid, slam)
-    #moving_t = threading.Thread(target=move)
-    #moving_t.daemon = True
-    #moving_t.start()
+    moving_t = threading.Thread(target=move)
+    moving_t.daemon = True
+    moving_t.start()
