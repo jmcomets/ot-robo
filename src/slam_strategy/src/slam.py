@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import time
 import threading
 from functools import partial
@@ -59,11 +57,9 @@ def move():
                 print('no map')
         time.sleep(0.2)
 
-if __name__ == '__main__':
-    rospy.init_node('mine_turtle')
+def main():
     transform_listener = tf.TransformListener()
     slam_sub = rospy.Subscriber('/map', OccupancyGrid, slam)
     #moving_t = threading.Thread(target=move)
     #moving_t.daemon = True
     #moving_t.start()
-    rospy.spin()
