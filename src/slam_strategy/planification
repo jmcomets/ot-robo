@@ -19,7 +19,7 @@ class Map(graphs.GridGraph):
     def neighbors(self, location):
         for n_location in graphs.GridGraph.neighbors(self, location):
             x, y = n_location
-            if self.map_data[x][y] not in (-1, 100):
+            if self.map_data[x][y] != 100:
                 yield n_location
 
 def to_position(position, quaternion):
@@ -31,6 +31,8 @@ def to_position(position, quaternion):
             }
 
 def map_subscriber(grid):
+    print('slam')
+
     # try to retrieve the position
     try:
         t = transform_listener.getLatestCommonTime('/base_footprint', '/map')
@@ -52,7 +54,7 @@ def map_subscriber(grid):
         'width': grid_info.width,
         'height': grid_info.height,
         'resolution': grid_info.resolution,
-        #'data': grid.data
+        'data': grid.data
         }
 
     # recalibrate with origin
@@ -60,7 +62,7 @@ def map_subscriber(grid):
     data['position']['y'] = data['height'] - (data['position']['y'] - data['origin']['y']) / data['resolution']
     data['position']['orientation'] += data['origin']['orientation']
 
-    print(data)
+    print(max(data['data']))
 
 rospy.Subscriber('/map', OccupancyGrid, map_subscriber)
 rospy.spin()
