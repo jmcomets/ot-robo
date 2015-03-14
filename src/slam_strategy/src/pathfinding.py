@@ -13,19 +13,6 @@ def _rebuild_path(path_map, end):
         current_source = path_map[current_source]
     return path
 
-def breadth_first_search(graph, source, end):
-    """Breadth-First-Search algorithm."""
-    to_visit = set([source])
-    came_from = {source: None}
-    while to_visit:
-        vertex = to_visit.pop()
-        if vertex == end:
-            return _rebuild_path(came_from, end)
-        for neighbor_vertex in graph.neighbors(vertex):
-            if neighbor_vertex not in came_from:
-                came_from[neighbor_vertex] = vertex
-                to_visit.add(neighbor_vertex)
-
 def dijkstra(graph, source, end):
     """Dijkstra's algorithm."""
     to_visit = set([source])
@@ -37,7 +24,6 @@ def dijkstra(graph, source, end):
             came_from[vertex] = None
         to_visit.add(vertex)
     while to_visit:
-        items = [(dist_to[v], v) for v in to_visit]
         vertex = min(to_visit, key=lambda v: dist_to[v])
         to_visit.remove(vertex)
         if vertex == end:
@@ -56,7 +42,6 @@ def astar(graph, source, end, heuristic):
     g_score = {source: 0}
     f_score = {source: g_score[source] + heuristic(source, end)}
     while open_set:
-        items = [(f_score[v], v) for v in open_set]
         vertex = min(open_set, key=lambda v: f_score[v])
         if vertex == end:
             return _rebuild_path(came_from, end)

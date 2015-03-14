@@ -1,9 +1,9 @@
 class Graph:
     DEFAULT_WEIGHT = 1
 
-    def neighbors(self, location):
-        """Returns an iterable of locations in the neighborhood of the given
-        `location` parameter.
+    def neighbors(self, node):
+        """Returns an iterable of nodes in the neighborhood of the given `node`
+        parameter.
         """
         raise NotImplementedError
 
@@ -12,8 +12,12 @@ class Graph:
         raise NotImplementedError
 
     def transition_cost(self, first, second):
-        """Returns the transition cost between two neighbors."""
+        """Returns the transition cost between two neighbor nodes."""
         return self.DEFAULT_WEIGHT
+
+    def bfs(self, source):
+        """Breadth-First-Search algorithm closure."""
+        return breadth_first_search(self, source, self.neighbors(node))
 
 class GridGraph(Graph):
     DIRECTIONS = {
@@ -48,3 +52,18 @@ class GridGraph(Graph):
     def in_bounds(self, location):
         x, y = location
         return 0 <= x < self.width and 0 <= y < self.height
+
+def breadth_first_search(graph, source, neighbors):
+    """Breadth-First-Search algorithm, yielding the nodes traversed in order.
+    The `neighbors` kwarg should be a function returning the neighbors of a
+    node.
+    """
+    queue = [source]
+    visited = set([source])
+    while queue:
+        node = queue.pop(0)
+        for neighbor in neighbors(node):
+            if neighbor not in visited:
+                yield neighbor
+                queue.append(neighbor)
+                visited.add(neighbor)
