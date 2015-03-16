@@ -17,7 +17,7 @@ class Graph:
 
     def bfs(self, source):
         """Breadth-First-Search algorithm closure."""
-        return breadth_first_search(self, source, self.neighbors(node))
+        return breadth_first_search(self, source, self.neighbors)
 
 class GridGraph(Graph):
     DIRECTIONS = {
