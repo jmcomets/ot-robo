@@ -40,14 +40,14 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * uncomment the add_*_files sections below as needed
 ##     and list every .msg/.srv/.action file to be processed
 ##   * uncomment the generate_messages entry below
-##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
+##   * add every package in MSG_DEP_SET to generate_messages(...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+ add_message_files(
+   FILES
+   Planification.msg
+   PlanificationPos.msg
+ )
 
 ## Generate services in the 'srv' folder
 # add_service_files(

@@ -1,4 +1,2 @@
-xs int[]
-ys int[]
-x int
-y int
+path PlanificationPos[]
+orientation float64
