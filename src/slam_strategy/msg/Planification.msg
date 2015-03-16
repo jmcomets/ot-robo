@@ -1,2 +1,2 @@
-path PlanificationPos[]
-orientation float64
+PlanificationPos[] path
+float64 orientation
