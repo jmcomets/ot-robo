@@ -51,11 +51,19 @@ class Map(GridGraph):
         x, y = node
         return self.map_data[x][y]
 
-def distance(first, second):
+def squared_distance(first, second):
+    """Compute the squared distance between two positions (tuples)."""
     return (first[0] - second[0])** 2 + (first[1] - second[1]) ** 2
-find_path = functools.partial(astar, heuristic=distance)
+
+# A* partial with `squared_distance` as heuristic
+find_path = functools.partial(astar, heuristic=squared_distance)
+
+def flatten(iterable):
+    """Itertools recipe: flatten an iterable of iterables."""
+    return itertools.chain.from_iterable(iterable)
 
 def path_to_waypoints(path):
+    """Simplify a path to a list of waypoints."""
     if not path:
         raise ValueError('path should not be empty')
 
@@ -76,6 +84,48 @@ def path_to_waypoints(path):
     # don't forget the last component
     waypoints.append(current)
     return waypoints
+
+def zone_map(map_, nb_zones):
+    """Divide the given map into a number of zones."""
+    zones = [[] for _ in range(nb_zones)]
+    taken = set()
+
+    # helpers for filtering available candidates for a new zone
+    is_candidate = lambda n: map_.is_unknown(n) and n not in taken
+    candidates = lambda ns: itertools.ifilter(is_candidate, ns)
+
+    # pull out all available zones
+    available_nodes = filter(map_.is_unknown, map_.vertices())
+    if not available_nodes: # TODO
+        raise RuntimeError('no available nodes')
+
+    # pick the starting points
+    for zone in zones:
+        while True:
+            start = random.choice(available_nodes)
+            if start not in flatten(zones):
+                break
+        zone.append(start)
+        taken.add(start)
+
+    # expand each zone by one node until the entire map is filled; this is a
+    # bit hard to read due to the zipping
+    bfss = [bfs(map_, start, lambda v: candidates(map_.neighbors(v)))
+            for start in flatten(zones)]
+    zones_completed = set()
+    while len(zones_completed) < len(zones):
+        for zone_id, zone_nodes in enumerate(itertools.izip(zones, bfss)):
+            if zone_id in zones_completed:
+                continue
+            zone, nodes = zone_nodes
+            try:
+                node = next(nodes)
+            except StopIteration:
+                zones_completed.add(zone_id)
+            else:
+                zone.append(node)
+                taken.add(node)
+    return zones
 
 def map_subscriber(grid):
     """Subscriber for the OccupancyGrid."""
