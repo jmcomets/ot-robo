@@ -2,13 +2,14 @@
 import os
 import sys
 import random
+import itertools
+import functools
 import numpy as np
-from functools import partial
 # ros modules
 import rospy
 import tf
 from nav_msgs.msg import OccupancyGrid
-from slam_strategy.msg import Planification
+from slam_strategy.msg import Planification, PlanificationPos
 # our modules
 this_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(this_dir, 'src'))
@@ -16,6 +17,7 @@ from graphs import GridGraph
 from pathfinding import astar
 
 # initialization
+print('init')
 rospy.init_node('planification')
 transform_listener = tf.TransformListener()
 
@@ -48,7 +50,29 @@ class Map(GridGraph):
 
 def distance(first, second):
     return (first[0] - second[0])** 2 + (first[1] - second[1]) ** 2
-find_path = partial(astar, heuristic=distance)
+find_path = functools.partial(astar, heuristic=distance)
+
+def path_to_waypoints(path):
+    if not path:
+        raise ValueError('path should not be empty')
+
+    # initialization
+    waypoints = [path[0]]
+    dx, dy = None, None
+    previous = waypoints[-1]
+
+    # look at the previous (dx, dy) vector and add the previous position as a
+    # waypoint if it differs from the current motion vector
+    for current in itertools.islice(path, 1, len(path)):
+        new_dx, new_dy = current[0] - previous[0], current[1] - previous[1]
+        if (dx is not None and dy is not None) and (new_dx != dx or new_dy != dy):
+            waypoints.append(previous)
+        dx, dy = new_dx, new_dy
+        previous = current
+
+    # don't forget the last component
+    waypoints.append(current)
+    return waypoints
 
 def to_position(position, quaternion):
     euler = tf.transformations.euler_from_quaternion(quaternion)
@@ -62,12 +86,13 @@ def map_subscriber(grid):
     """Subscriber for the OccupancyGrid."""
 
     # try to retrieve the position
+    print('Retrieving the position')
     try:
         t = transform_listener.getLatestCommonTime('/base_footprint', '/map')
         position, quaternion = transform_listener.lookupTransform('/base_footprint', '/map', t)
         position = to_position(position, quaternion)
     except tf.Exception as e:
-        #print(e)
+        print('Error retrieving the position: %s' % e)
         return
 
     # origin
@@ -92,27 +117,31 @@ def map_subscriber(grid):
     #data['position']['y'] = (data['position']['y'] - data['origin']['y'])
     #data['position']['orientation'] += data['origin']['orientation']
 
-    # scale to resolution
-    data['position']['x'] /= data['resolution']
-    data['position']['y'] /= data['resolution']
-
     # find path from current position to destination
     map_ = Map(data['data'], data['width'], data['height'])
-    src = (int(data['position']['x']), int(data['position']['y']))
-    unknown_vs = filter(lambda v: map_.is_unknown(v[0], v[1]), map_.vertices())
-    dest = random.choice(unknown_vs)
-    #import time
-    #t = time.time()
+    src = (data['position']['x'] / data['resolution'],  data['position']['y'] / data['resolution'])
+
+    # choose destination (FIXME too slow)
+    print('Choosing destination')
+    dest = next(itertools.ifilter(lambda v: map_.is_unknown(v[0], v[1]), map_.bfs(src)))
+
+    import time
+    t = time.time()
+    print('Path:', src, ' -> ', dest)
     path = find_path(map_, src, dest)
-    print(src, ' -> ', dest)
-    print(path)
-    #print(time.time() - t)
-    pub = rospy.Publisher('/planif', Planification)
-    pub.publish(Planification(x=data['position']['x'],
-                              y=data['position']['y'],
-                              w=data['position']['orientation'],
-                              xs=map(lambda v: v[0] * data['resolution'], path),
-                              ys=map(lambda v: v[1] * data['resolution'], path)))
+    if path is None:
+        print('Done. No path')
+    else:
+        old_len = len(path)
+        path = path_to_waypoints(path)
+        print('path reduced from %s to %s elements' % (old_len, len(path)))
+        #print(path)
+        print('Done. took: %s seconds' % (time.time() - t))
+        pub = rospy.Publisher('/planif', Planification)
+        pub.publish(Planification(orientation=data['position']['orientation'],
+                                  path=map(lambda v: PlanificationPos(x=v[0] * data['resolution'],
+                                                                      y=v[1] * data['resolution']),
+                                           path)))
 
 rospy.Subscriber('/map', OccupancyGrid, map_subscriber)
 rospy.spin()
