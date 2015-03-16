@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+import rospy
+from slam_strategy.msg import Planification, PlanificationPos
+
+rospy.init_node("ARGRARJGHH")
+
+planification_pub = rospy.Publisher("/planif", Planification)
+planif = Planification()
+planif.path = []
+planif.path.append(PlanificationPos(x=0, y=0))
+planif.path.append(PlanificationPos(x=1, y=0))
+planif.orientation = 0
+planification_pub.publish(planif)
+
+# vim: ft=python et sw=4 sts=4
