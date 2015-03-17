@@ -17,8 +17,12 @@ from graphs import GridGraph
 from pathfinding import astar
 
 # initialization
-rospy.init_node('planification')
+rospy.init_node('planification', log_level=rospy.DEBUG)
 transform_listener = tf.TransformListener()
+
+# constants (distances are in cm)
+bot_radius = 20
+horizon_distance = 100
 
 class Map(GridGraph):
     EMPTY = 0
@@ -32,20 +36,25 @@ class Map(GridGraph):
 
     def neighbors(self, node):
         for node in GridGraph.neighbors(self, node):
-            if not self.is_obstacle(node):
+            if not self.has_nearby_obstacle(node):
                 yield node
 
+    def has_nearby_obstacle(self, node):
+        node_x, node_y = node
+        for x in range(node_x - bot_radius, node_x + bot_radius):
+            for y in range(node_y - bot_radius, node_y + bot_radius):
+                if self.is_obstacle((x, y)):
+                    return True
+        return False
+
     def is_obstacle(self, node):
-        x, y = node
-        return self.data_at(x, y) == self.OBSTACLE
+        return self.data_at(node) == self.OBSTACLE
 
     def is_unknown(self, node):
-        x, y = node
-        return self.data_at(x, y) == self.UNKNOWN
+        return self.data_at(node) == self.UNKNOWN
 
     def is_empty(self, node):
-        x, y = node
-        return self.data_at(x, y) == self.EMPTY
+        return self.data_at(node) == self.EMPTY
 
     def data_at(self, node):
         x, y = node
@@ -54,6 +63,10 @@ class Map(GridGraph):
 def squared_distance(first, second):
     """Compute the squared distance between two positions (tuples)."""
     return (first[0] - second[0])** 2 + (first[1] - second[1]) ** 2
+
+def euclidean_distance(first, second):
+    """Compute the euclidean distance between two positions (tuples)."""
+    return squared_distance(first, second) ** 0.5
 
 # A* partial with `squared_distance` as heuristic
 find_path = functools.partial(astar, heuristic=squared_distance)
@@ -127,6 +140,14 @@ def zone_map(map_, nb_zones):
                 taken.add(node)
     return zones
 
+def choose_destination(map_, src, min_distance):
+    last_node = None
+    for node in itertools.ifilter(map_.is_unknown, map_.bfs(src)):
+        if euclidean_distance(src, node) >= min_distance:
+            return node
+        last_node = node
+    return last_node
+
 def map_subscriber(grid):
     """Subscriber for the OccupancyGrid."""
 
@@ -155,10 +176,9 @@ def map_subscriber(grid):
     src = x / resolution,  y / resolution
 
     # choose destination
-    rospy.logdebug('finding next destination')
-    try:
-        dest = next(itertools.ifilter(map_.is_unknown, map_.bfs(src)))
-    except StopIteration:
+    rospy.logdebug('finding next destination at %s cm', horizon_distance)
+    dest = choose_destination(map_, src, horizon_distance)
+    if dest is None:
         rospy.logwarn('no available destination')
         return
 
@@ -175,7 +195,7 @@ def map_subscriber(grid):
         old_len = len(path)
         path = path_to_waypoints(path)
         dt = time.time() - t
-        rospy.logdebug('path reduced from %s to %s elements, took %s seconds', (old_len, len(path), dt))
+        rospy.logdebug('path reduced from %s to %s elements, took %s seconds', old_len, len(path), dt)
 
         # publish formatted data (path + orientation)
         pub = rospy.Publisher('/planif', Planification)
