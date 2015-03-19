@@ -10,9 +10,10 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   tf
-  OpenCV 
+  # OpenCV 
 )
-include_directories(${catkin_INCLUDE_DIRS})
+find_package( OpenCV REQUIRED )
+include_directories(${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -117,7 +118,7 @@ add_executable(mapstitch_node
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(mapstitch_node
-  ${catkin_LIBRARIES}
+  ${catkin_LIBRARIES} ${OpenCV_LIBRARIES}
 )
 
 #############
