@@ -19,7 +19,7 @@ from pathfinding import astar
 from motion import follow_path
 
 # initialization
-rospy.init_node('planification', log_level=rospy.DEBUG)
+rospy.init_node('slam_strategy', log_level=rospy.DEBUG)
 transform_listener = tf.TransformListener()
 
 # constants (distances are in cm)
@@ -224,6 +224,11 @@ def ai():
     dt = time.time() - t
     if path is not None:
         rospy.logdebug('path computed in %s seconds', dt)
+
+        # scale path to resolution
+        for i, position in enumerate(path):
+            xp, yp = position
+            path[i] = xp * resolution, yp * resolution
 
         # reduce path to waypoints
         t = time.time()
