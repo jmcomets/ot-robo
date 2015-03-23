@@ -24,7 +24,7 @@ transform_listener = tf.TransformListener()
 
 # constants (distances are in cm)
 bot_radius = 10
-horizon_distance = 75
+horizon_distance = 0.75
 ai_rate = 1
 position_poller_rate = 1
 
@@ -195,22 +195,31 @@ def ai():
         map_data = _map.data
         width, height = _map.info.width, _map.info.height
         resolution = _map.info.resolution
+        origin_x, origin_y = _map.info.origin.position.x, _map.info.origin.position.y
+        origin_quaternion = _map.info.origin.orientation
+        origin_orientation = tf.transformations.euler_from_quaternion(
+                (origin_quaternion.x,
+                 origin_quaternion.y,
+                 origin_quaternion.z,
+                 origin_quaternion.w))[2]
     with _position_lock:
         x, y, orientation = _position
 
     # recalibrate with origin
-    #x -= origin_x
-    #y -= origin_y
-    #orientation += origin_orientation
+    x = x / resolution - origin_x
+    y = y / resolution - origin_y
+    orientation += origin_orientation
 
     # find path from current position to destination
     map_ = Map(np.reshape(map_data, (width, height)), width, height)
-    src = x / resolution,  y / resolution
+    #rospy.logdebug('position before pathfinding (%s, %s)', x, y)
+    #rospy.logdebug('position before pathfinding (%s, %s)', x / resolution, y / resolution)
 
     # choose destination
-    rospy.logdebug('finding next destination at %s cm', horizon_distance)
+    rospy.logdebug('finding next destination at %s m', horizon_distance)
+    src = x, y
     t = time.time()
-    dest = choose_destination(map_, src, horizon_distance)
+    dest = choose_destination(map_, src, horizon_distance / resolution)
     dt = time.time() - t
     if dest is None:
         rospy.logwarn('no available destination')
@@ -225,11 +234,6 @@ def ai():
     if path is not None:
         rospy.logdebug('path computed in %s seconds', dt)
 
-        # scale path to resolution
-        for i, position in enumerate(path):
-            xp, yp = position
-            path[i] = xp * resolution, yp * resolution
-
         # reduce path to waypoints
         t = time.time()
         old_len = len(path)
@@ -237,8 +241,13 @@ def ai():
         dt = time.time() - t
         rospy.logdebug('path reduced from %s to %s elements, took %s seconds', old_len, len(path), dt)
 
+        # scale path to resolution
+        for i, position in enumerate(path):
+            xp, yp = position
+            path[i] = xp * resolution, yp * resolution
+
         # follow the path (motion)
-        follow_path(path, orientation)
+        follow_path(path, orientation, resolution)
     else:
         rospy.logdebug('no path found, computation took %s seconds', dt)
 
