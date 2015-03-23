@@ -15,17 +15,18 @@ def fragment_moves(value, min_value, max_value):
     """
     rospy.logdebug('request = %s, min = %s, max = %s', value, min_value, max_value)
     values = []
-    while abs(value) >= abs(min_value):
-        delta = min(abs(value), abs(max_value))*sign(value)
+    while abs(value) >= min_value:
+        delta = min(abs(value), max_value) * sign(value)
         values.append(delta)
         value -= delta
     rospy.logdebug('values = %s, error = %s', values, value)
     return values, value
 
 def sign(value):
+    """Returns the sign of a value."""
     return value/abs(value)
 
-def follow_path(path, orientation, resolution):
+def follow_path(path, orientation):
     motion_pub = rospy.Publisher('/cmd_vel_mux/input/teleop', Twist)
     rotation_error = 0
     translation_error = 0
@@ -35,8 +36,6 @@ def follow_path(path, orientation, resolution):
 
     for i in range(1, len(path)):
         rospy.logdebug('moving to new waypoint')
-        rospy.logdebug('current position is : %s', path[i])
-        rospy.logdebug('current cell is : (%s, %s)', path[i][0] / resolution, path[i][1] / resolution)
 
         # rotation
         rotation_twist = Twist()
@@ -46,16 +45,12 @@ def follow_path(path, orientation, resolution):
         if angular_dist > math.pi:
             angular_dist = - angular_dist % math.pi
         if angular_dist != 0:
-            if angular_dist > 0:
-                moves, rotation_error = fragment_moves(angular_dist, min_rotation, max_rotation)
-            else:
-                moves, rotation_error = fragment_moves(angular_dist, -max_rotation, -min_rotation)
+	    moves, rotation_error = fragment_moves(angular_dist, min_rotation, max_rotation)
             for rotation in moves:
                 rotation_twist.angular.z = rotation
                 rospy.logdebug('rotating by %s radians', rotation_twist.angular.z)
                 motion_pub.publish(rotation_twist)
                 rospy.sleep(1)
-            orientation = angular_dist
 
         # translation
         translation_twist = Twist()
