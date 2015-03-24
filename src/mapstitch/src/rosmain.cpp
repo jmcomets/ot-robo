@@ -43,8 +43,8 @@ bool   debug = false;
 struct stitch_maps {
   Mat   asimage;
   float resolution,
-        origin_x,
-        origin_y;
+  origin_x,
+  origin_y;
   char* frame_id;
 } old_world, old_map;
 
@@ -54,9 +54,9 @@ bool tf_valid = false;
 Mat toMat(const nav_msgs::OccupancyGrid *map)
 {
   uint8_t *data = (uint8_t*) map->data.data(),
-           testpoint = data[0];
+  testpoint = data[0];
   bool mapHasPoints = false;
-
+  cout << "test";
   Mat im(map->info.height, map->info.width, CV_8UC1);
 
   // transform the map in the same way the map_saver component does
@@ -73,7 +73,7 @@ Mat toMat(const nav_msgs::OccupancyGrid *map)
 
   // sanity check
   if (!mapHasPoints) { ROS_WARN("map is empty, ignoring update."); }
-
+  cout<<"chat0"<<endl;
   return im;
 }
 
@@ -88,14 +88,15 @@ void publish_stitch()
 
 void update_tf(struct stitch_maps *w, struct stitch_maps *m)
 {
+  cout<<"enter update tf" << endl;
   if (w == NULL) { ROS_INFO("world map not loaded"); return; }
   if (m == NULL) { ROS_INFO("map not loaded"); return; }
 
   // sanity check on input
   if (w->resolution != m->resolution) {
-    ROS_WARN("map (%.3f) resolution differs from world resolution(%.3f)"
-             "  and scaling not implemented, ignoring update",
-             m->resolution, w->resolution);
+    ROS_WARN("map (%.10f) resolution differs from world resolution(%.10f)"
+     "  and scaling not implemented, ignoring update",
+     m->resolution, w->resolution);
     return;
   }
 
@@ -103,13 +104,13 @@ void update_tf(struct stitch_maps *w, struct stitch_maps *m)
     imwrite("current_map.pgm", m->asimage);
     imwrite("current_world.pgm", w->asimage);
   }
-
+  cout<<"chat3rosmain"<<endl;
   StitchedMap c(w->asimage,m->asimage, max_distance);
-
+  cout<<"chat1irosmain"<<endl;
   // sanity checks
   if ((c.rotation == 0. && (int) c.transx == 0 && (int) c.transy == 0) ||
-      (int) c.transx == INT_MAX || (int) c.transx == INT_MIN ||
-      (int) c.transy == INT_MAX || (int) c.transy == INT_MIN)
+    (int) c.transx == INT_MAX || (int) c.transx == INT_MIN ||
+    (int) c.transy == INT_MAX || (int) c.transy == INT_MIN)
   {
     ROS_INFO("homography estimation didn't work, not stitching.");
     return;
@@ -122,7 +123,7 @@ void update_tf(struct stitch_maps *w, struct stitch_maps *m)
   if (save_stitch.size() > 0) {
     imwrite(save_stitch.c_str(), c.get_stitch());
   }
-
+  cout<<"chat2rosmain"<<endl;
   // publish this as the transformation between /world -> /map
   // The point-of-reference for opencv is the edge of the image, for ROS
   // this is the centerpoint of the image, which is why we translate each
@@ -131,37 +132,45 @@ void update_tf(struct stitch_maps *w, struct stitch_maps *m)
   float res = m->resolution;
   Mat H  = c.H;
   Mat E  = (Mat_<double>(3,3) << 1, 0,  m->origin_x,
-                                 0, 1,  m->origin_y,
-                                 0, 0, 1),
-      E_ = (Mat_<double>(3,3) << 1, 0, -m->origin_x,
-                                 0, 1, -m->origin_y,
-                                 0, 0, 1);
+   0, 1,  m->origin_y,
+   0, 0, 1),
+  E_ = (Mat_<double>(3,3) << 1, 0, -m->origin_x,
+   0, 1, -m->origin_y,
+   0, 0, 1);
   H.resize(3);
   H.at<double>(2,2) = 1.;
   H.at<double>(2,0) = H.at<double>(2,1) = 0.;
   H.at<double>(1,2) *= res;
   H.at<double>(0,2) *= res;
   H = E*H*E_;
-
+  cout << "chat4 rosmain"<<endl;
   double rot = -1 *atan2(H.at<double>(0,1),H.at<double>(1,1)),
-      transx = H.at<double>(0,2),
-      transy = H.at<double>(1,2);
+  transx = H.at<double>(0,2),
+  transy = H.at<double>(1,2);
 
   ROS_INFO("stichted map with rotation %.5f radians and (%f,%f) translation",
-      rot,transx,transy);
+    rot,transx,transy);
 
   ourtf = Transform( Quaternion(Vector3(0,0,1), rot),
-                     Vector3(transx,transy,0) );
+   Vector3(transx,transy,0) );
   tf_valid = true;
 
   if (m->frame_id  == w->frame_id)
-    ROS_WARN("frame_id for world and map are the same, this will probably not work"
-             "If map_server publishes your maps you might want to use _frame_id:=/world");
+    
+
+  imwrite("current_map.pgm", m->asimage);
+  imwrite("current_world.pgm", w->asimage);
+
+  
+  ROS_WARN("frame_id for world and map are the same, this will probably not work"
+   "If map_server publishes your maps you might want to use _frame_id:=/world");
+  cout<<"quit update tf"<<endl;
 }
 
 void update_stitch(struct stitch_maps *old_map,
-                   const nav_msgs::OccupancyGrid& new_map)
+ const nav_msgs::OccupancyGrid& new_map)
 {
+  cout<<"update stitch"<<endl;
   old_map->asimage    = toMat(&new_map);
   old_map->resolution = new_map.info.resolution;
   old_map->origin_x   = new_map.info.origin.position.x;
@@ -172,6 +181,7 @@ void update_stitch(struct stitch_maps *old_map,
     free(old_map->frame_id);
     old_map->frame_id  = strdup(new_map.header.frame_id.c_str());
   }
+  cout<<"leave update stitch" << endl;
 }
 
 void worldCallback(const nav_msgs::OccupancyGrid& new_world)
@@ -189,8 +199,8 @@ void mapCallback(const nav_msgs::OccupancyGrid& new_map)
 void alignCallback(const nav_msgs::OccupancyGrid& new_map)
 {
   update_stitch(&old_map, new_map);
-  update_tf(&old_world, &old_map);
-  publish_stitch();
+  // update_tf(&old_world, &old_map);
+  // publish_stitch();
 }
 
 int main(int argc, char **argv)
@@ -208,8 +218,8 @@ int main(int argc, char **argv)
   old_world.frame_id = old_map.frame_id = NULL;
 
   ros::Subscriber submap   = n.subscribe("map", 1000, mapCallback),
-                  subworld = n.subscribe("world", 1000, worldCallback),
-                  subalign = n.subscribe("align", 1000, alignCallback);
+  subworld = n.subscribe("align", 1000, worldCallback),
+  subalign = n.subscribe("world", 1000, alignCallback);
   ros::spin();
 
   return 0;
