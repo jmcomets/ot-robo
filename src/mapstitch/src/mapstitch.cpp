@@ -24,29 +24,34 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 #include "mapstitch.h"
 #include "math.h"
+#include <iostream>
+#include <string>
+
+using namespace std;
 
 StitchedMap::StitchedMap(Mat &img1, Mat &img2, float max_pairwise_distance)
 {
+cout << "chat1" <<endl;
   // load images, TODO: check that they're grayscale
   image1 = img1.clone();
   image2 = img2.clone();
-
+cout << "chat2" <<endl;
   // create feature detector set.
   OrbFeatureDetector detector;
   OrbDescriptorExtractor dexc;
   BFMatcher dematc(NORM_HAMMING, false);
-
+cout << "chat3" <<endl;
   // 1. extract keypoints
   detector.detect(image1, kpv1);
   detector.detect(image2, kpv2);
-
+cout << "chat4" <<endl;
   // 2. extract descriptors
   dexc.compute(image1, kpv1, dscv1);
   dexc.compute(image2, kpv2, dscv2);
-
+cout << "chat5" <<endl;
   // 3. match keypoints
   dematc.match(dscv1, dscv2, matches);
-
+cout << "chat6" <<endl;
   // 4. find matching point pairs with same distance in both images
   for (size_t i=0; i<matches.size(); i++) {
     KeyPoint a1 = kpv1[matches[i].queryIdx],
@@ -78,12 +83,22 @@ StitchedMap::StitchedMap(Mat &img1, Mat &img2, float max_pairwise_distance)
     }
   }
 
-  if (coord1.size() == 0)
-    ;
-
-  // 5. find homography
+  if (coord1.size() == 0 || coord2.size() == 0)
+   {
+rotation = 0;
+transx=0;
+transy=0;
+scalex=0;
+scaley=0;
+return;
+}
+cout << "chat7" <<endl;
+cout << coord2 << endl;
+cout << coord1 << endl;
+ 
+ // 5. find homography
   H = estimateRigidTransform(coord2, coord1, false);
-
+cout << "chat8" <<endl;
   // 6. calculate this stuff for information
   rotation = 180./M_PI*atan2(H.at<double>(0,1),H.at<double>(1,1)),
   transx   = H.at<double>(0,2),
@@ -91,7 +106,6 @@ StitchedMap::StitchedMap(Mat &img1, Mat &img2, float max_pairwise_distance)
   scalex   = sqrt(pow(H.at<double>(0,0),2)+pow(H.at<double>(0,1),2));
   scaley   = sqrt(pow(H.at<double>(1,0),2)+pow(H.at<double>(1,1),2));
 }
-
 Mat
 StitchedMap::get_debug()
 {
