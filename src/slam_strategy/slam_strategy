@@ -22,9 +22,9 @@ from motion import follow_path
 rospy.init_node('slam_strategy', log_level=rospy.DEBUG)
 transform_listener = tf.TransformListener()
 
-# constants (distances are in cm)
-bot_radius = 10
-horizon_distance = 0.75
+# constants (distances are in m)
+bot_radius = 0.10
+horizon_distance = 1.5
 ai_rate = 1
 position_poller_rate = 1
 
@@ -43,15 +43,6 @@ class Map(GridGraph):
             if not self.is_obstacle(node):
             #if not self.has_nearby_obstacle(node):
                 yield node
-
-    def has_nearby_obstacle(self, node):
-        # use a cache for faster lookup?
-        node_x, node_y = node
-        for x in range(int(node_x - bot_radius), int(node_x + bot_radius)):
-            for y in range(int(node_y - bot_radius), int(node_y + bot_radius)):
-                if self.is_obstacle((x, y)):
-                    return True
-        return False
 
     def is_obstacle(self, node):
         return self.data_at(node) == self.OBSTACLE
@@ -154,6 +145,24 @@ def choose_destination(map_, src, min_distance):
         last_node = node
     return last_node
 
+def has_nearby_obstacle(map_, node, radius):
+    node_x, node_y = node
+    for x in range(int(node_x - radius), int(node_x + radius)):
+        for y in range(int(node_y - radius), int(node_y + radius)):
+            if map_.is_obstacle((x, y)):
+                return True
+    return False
+
+def inflate_obstacles(map_, node, radius, bot_radius):
+    x, y = node
+    obstacles = []
+    for xp in range(int(x - radius), int(x + radius)):
+        for yp in range(int(y - radius), int(y + radius)):
+            if has_nearby_obstacle(map_, (xp, yp), bot_radius):
+                obstacles.append((xp, yp))
+    for xp, yp in obstacles:
+        map_.map_data[xp][yp] = map_.OBSTACLE
+
 # globals
 _map_lock = threading.Lock()
 _map = None
@@ -190,36 +199,45 @@ def ai():
     if _map is None or _position is None:
         return
 
-    # get interesting data
+    # pull interesting data
     with _map_lock:
         map_data = _map.data
         width, height = _map.info.width, _map.info.height
         resolution = _map.info.resolution
         origin_x, origin_y = _map.info.origin.position.x, _map.info.origin.position.y
         origin_quaternion = _map.info.origin.orientation
-        origin_orientation = tf.transformations.euler_from_quaternion(
-                (origin_quaternion.x,
-                 origin_quaternion.y,
-                 origin_quaternion.z,
-                 origin_quaternion.w))[2]
     with _position_lock:
         x, y, orientation = _position
+    origin_quaternion = (
+            origin_quaternion.x,
+            origin_quaternion.y,
+            origin_quaternion.z,
+            origin_quaternion.w,
+            )
+    origin_orientation = tf.transformations.euler_from_quaternion(origin_quaternion)[2]
 
     # recalibrate with origin
-    x = x / resolution - origin_x
-    y = y / resolution - origin_y
+    x = origin_x + x / resolution
+    y = origin_y + y / resolution
     orientation += origin_orientation
+    src = x, y
 
-    # find path from current position to destination
+    # log odometry data
+    rospy.logdebug('origin=(%s, %s) m, position=(%s, %s) m, resolution=%s m/px, current cell=(%s, %s)',
+                   origin_x, origin_y, x, y, resolution, x / resolution, y / resolution)
+
+    # map contanining the occupancy grid
     map_ = Map(np.reshape(map_data, (width, height)), width, height)
-    #rospy.logdebug('position before pathfinding (%s, %s)', x, y)
-    #rospy.logdebug('position before pathfinding (%s, %s)', x / resolution, y / resolution)
+
+    # update the map locally by inflating the walls to avoid them easily
+    horizon_cell_distance = horizon_distance / resolution
+    bot_cell_radius = bot_radius / resolution
+    inflate_obstacles(map_, src, horizon_cell_distance, bot_cell_radius)
 
     # choose destination
-    rospy.logdebug('finding next destination at %s m', horizon_distance)
-    src = x, y
+    rospy.logdebug('finding next destination at %s m (%s cells)', horizon_distance, horizon_cell_distance)
     t = time.time()
-    dest = choose_destination(map_, src, horizon_distance / resolution)
+    dest = choose_destination(map_, src, horizon_cell_distance)
     dt = time.time() - t
     if dest is None:
         rospy.logwarn('no available destination')
@@ -241,14 +259,15 @@ def ai():
         dt = time.time() - t
         rospy.logdebug('path reduced from %s to %s elements, took %s seconds', old_len, len(path), dt)
 
-        # scale path to resolution
+        # scale path back to world unit
         for i, position in enumerate(path):
             xp, yp = position
             path[i] = xp * resolution, yp * resolution
 
         # follow the path (motion)
-        follow_path(path, orientation, resolution)
+        follow_path(path, orientation)
     else:
+        # TODO random motion?
         rospy.logdebug('no path found, computation took %s seconds', dt)
 
 def run_ai():
